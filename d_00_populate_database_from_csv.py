@@ -7,7 +7,7 @@ import csa_app.model as model
 
 # Configuration
 
-csv_files = ["data/russian-troll-tweets-master/IRAhandle_tweets_1.csv"]
+csv_files = ["tests/testdata.csv"]
 field_mapping = {
     "body": "content",
     "author": "author",

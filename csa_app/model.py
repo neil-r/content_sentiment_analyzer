@@ -38,13 +38,13 @@ class SentimentSummary:
     location: typing.Optional[str]
     content_datetime: typing.Optional[str]
 
-    main_topic_lemma: str
-    main_topic_lemma_id: typing.Optional[str]
-    main_topic_ids_expanded: typing.Optional[typing.List[str]]
+    topic: str
+    topic_lemma: typing.Optional[str]
+    topic_values: typing.Optional[typing.List[str]]
 
     contributors: typing.List[str]
-    contributors_ids_expanded: typing.Optional[str]
+    contributors_values: typing.Optional[str]
 
-    verb_lemma: str
-    verb_lemma_id: typing.Optional[str]
-    verb_ids_expanded: typing.Optional[typing.List[str]]
+    method: str
+    method_lemma: typing.Optional[str]
+    method_values: typing.Optional[typing.List[str]]

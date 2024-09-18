@@ -36,15 +36,14 @@ class DatabaseSqlLite:
                 discussion_duration REAL NOT NULL,
                 location TEXT NULL,
                 content_datetime TEXT NULL,
-                associations TEXT NOT NULL,
-                cause TEXT NOT NULL,
-                verb_lemma TEXT NOT NULL,
-                verb_lemma_id TEXT NULL,
-                topic_lemma TEXT NOT NULL,
+                contributors TEXT NOT NULL,
+                contributors_values TEXT NULL,
+                method TEXT NOT NULL,
+                method_lemma_id TEXT NULL,
+                method_values TEXT NULL,
+                topic TEXT NULL,
                 topic_lemma_id TEXT NULL,
-                verb_values TEXT NULL,
                 topic_values TEXT NULL,
-
                 PRIMARY KEY (content_hash, model_id, prompt_strategy));
             """
             )
@@ -54,9 +53,9 @@ class DatabaseSqlLite:
     def get_unanalyzed_content(self, number: int = 100) -> typing.List[Content]:
         with sqlite3.connect(self.db_file_path) as c:
             results = c.execute(
-                "SELECT * FROM content LIMIT ?, 1",
+                "SELECT * FROM content c LEFT JOIN sentiment_summaries s ON c.content_hash = s.content_hash WHERE s.content_hash IS NULL LIMIT 0, ?",
                 (number,),
-            ).fetchmany()
+            ).fetchall()
 
             if results is not None:
                 return list(
@@ -104,18 +103,29 @@ class DatabaseSqlLite:
             # Convert list of dataclass instances to list of tuples
             data_to_insert = [
                 (
-                    c.content_hash,
-                    c.body,
-                    c.author,
-                    c.forum,
-                    json.dumps(c.raw_details),
-                    c.written_date_time,
+                    s.content_hash,
+                    s.model_id,
+                    s.prompt_strategy,
+                    (1 if s.sentiment else 0 if s.sentiment is not None else None),
+                    json.dumps(s.log),
+                    json.dumps(s.justifications),
+                    s.discussion_duration,
+                    s.location,
+                    s.content_datetime,
+                    json.dumps(s.contributors),
+                    json.dumps(s.contributors_values),
+                    s.method,
+                    s.method_lemma,
+                    json.dumps(s.method_values),
+                    s.topic,
+                    s.topic_lemma,
+                    json.dumps(s.topic_values),
                 )
-                for c in lst_summaries
+                for s in lst_summaries
             ]
 
             cur.executemany(
-                "INSERT INTO sentiment_summaries VALUES (?,?,?,?,?,?,?,?,?);",
+                "INSERT INTO sentiment_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);",
                 data_to_insert,
             )
 

@@ -15,7 +15,7 @@ db_file_path = "data.db"
 batch_size = 10
 max_number_of_batches = 1
 processor = functools.partial(
-    csa_app.ai_processor_openai.process, model="gpt-3.5-turbo-1106"
+    csa_app.ai_processor_openai.process, model="gpt-4o-mini"
 )
 api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = api_key
@@ -33,7 +33,7 @@ if __name__ == "__main__":
         for content in content_batch:
             summary = processor(content)
             if summary is not None:
-                summaries.append(content)
+                summaries.append(summary)
             else:
                 print(
                     f"Odd, this content was skipped given processor did not like it: {content}"

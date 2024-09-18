@@ -32,6 +32,13 @@ MANIFEST
 *.manifest
 *.spec
 
+# Proof-of-Concepts
+poc_*.py
+
+# Local datafiles
+
+data/
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt

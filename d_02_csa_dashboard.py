@@ -3,36 +3,63 @@ from dash import dcc, html
 from dash.dependencies import Input, Output, State
 import plotly.express as px
 import dash_bootstrap_components as dbc
+from dash import dash_table
+
+import pandas as pd
+
+from csa_app.database import DatabaseSqlLite
+
+
+database = DatabaseSqlLite()
 
 # Initialize Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 # Sample data for charts
-df = px.data.gapminder()
+df = database.lookup_sentiment_summaries(return_limit=10)
+query_count = 0
 
-# Pie chart configuration (example)
+COL_SENTIMENT = "sentiment"
+COL_METHOD = "method"
+COL_TOPIC = "topic"
+
+ANY_VALUE = "!any!"
+
+lst_columns = [
+    {"label":"Sentiment","value":COL_SENTIMENT},
+    {"label":"Method", "value":COL_METHOD},
+    {"label":'Topic', "value":COL_TOPIC}
+]
+
+
+default_top_left_column = COL_SENTIMENT
+default_top_right_column = COL_TOPIC
+
+
+# Pie chart configuration
 pie_chart = dcc.Graph(
     id="pie-chart",
-    figure=px.pie(df, names="continent", values="pop", title="Pie Chart"),
+    figure=px.pie(),
 )
 
-# Bar chart configuration (example)
+# Bar chart configuration
 bar_chart = dcc.Graph(
-    id="bar-chart", figure=px.bar(df, x="continent", y="pop", title="Bar Chart")
+    id="bar-chart", figure=px.bar()
 )
 
-# Map with timeline (example)
+# Map with timeline
 map_timeline = dcc.Graph(
     id="map-timeline",
-    figure=px.scatter_geo(
-        df,
-        locations="iso_alpha",
-        color="continent",
-        hover_name="country",
-        size="pop",
-        animation_frame="year",
-        projection="natural earth",
-    ),
+    figure=px.scatter_geo(),
+    #px.scatter_geo(
+    #    df,
+    #    locations="iso_alpha",
+    #    color="continent",
+    #    hover_name="country",
+    #    size="pop",
+    #    animation_frame="year",
+    #    projection="natural earth",
+    #),
 )
 
 # Layout
@@ -42,12 +69,6 @@ app.layout = html.Div(
         dbc.Navbar(
             dbc.Container(
                 [
-                    html.Div(
-                        [
-                            html.H1("Content Sentiment Browser"),
-                        ],
-                        className="d-inline-block ml-auto",
-                    ),
                     html.Div(
                         [
                             dbc.Button(
@@ -60,17 +81,17 @@ app.layout = html.Div(
                     html.Div(
                         [
                             dbc.Input(
-                                id="search-1",
+                                id="search-contributor",
                                 placeholder="Cause lookup...",
                                 type="text",
                             ),
                             dcc.Dropdown(
-                                id="dropdown-1",
+                                id="dropdown-contributor",
                                 options=[
-                                    {"label": "Option 1", "value": "1"},
+                                    {"label": "Any", "value": ANY_VALUE},
                                     {"label": "Option 2", "value": "2"},
                                 ],
-                                value="1",
+                                value=ANY_VALUE,
                             ),
                         ],
                         className="d-inline-block ml-auto",
@@ -78,17 +99,17 @@ app.layout = html.Div(
                     html.Div(
                         [
                             dbc.Input(
-                                id="search-2",
+                                id="search-method",
                                 placeholder="Action lookup...",
                                 type="text",
                             ),
                             dcc.Dropdown(
-                                id="dropdown-2",
+                                id="dropdown-method",
                                 options=[
-                                    {"label": "Option 1", "value": "1"},
+                                    {"label": "Any", "value": ANY_VALUE},
                                     {"label": "Option 2", "value": "2"},
                                 ],
-                                value="1",
+                                value=ANY_VALUE,
                             ),
                         ],
                         className="d-inline-block mx-2",
@@ -96,17 +117,17 @@ app.layout = html.Div(
                     html.Div(
                         [
                             dbc.Input(
-                                id="search-3",
+                                id="search-topic",
                                 placeholder="Topic lookup...",
                                 type="text",
                             ),
                             dcc.Dropdown(
-                                id="dropdown-3",
+                                id="dropdown-topic",
                                 options=[
-                                    {"label": "Option 1", "value": "1"},
+                                    {"label": "Any", "value": ANY_VALUE},
                                     {"label": "Option 2", "value": "2"},
                                 ],
-                                value="1",
+                                value=ANY_VALUE,
                             ),
                         ],
                         className="d-inline-block mx-2",
@@ -127,85 +148,172 @@ app.layout = html.Div(
             className="mb-4",
         ),
         # Collapsible left panel (Facts)
-        html.Div(
-            [
-                dbc.Collapse(
-                    dbc.Card(
-                        dbc.CardBody(
-                            [
-                                html.H5("Justifications"),
-                                html.Ul(
-                                    [html.Li(f"Fact {i}") for i in range(1, 6)]
-                                ),  # Example facts
-                            ]
-                        )
-                    ),
-                    id="collapse-left",
-                    is_open=True,
+        dcc.Loading(
+            id="loading-screen",
+            type="circle",
+            children=html.Div(
+                children=[
+                    dcc.Store(id='data-loading-number', storage_type='memory'),
+                    html.Div(
+                        [
+                        dbc.Collapse(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    [
+                                        html.H5("Justifications"),
+                                        dash_table.DataTable(id='tbl_justifications')
+                                    ]
+                                )
+                            ),
+                            id="collapse-left",
+                            is_open=True,
+                        ),
+                    ],
+                    id="left-panel",
+                    style={
+                        "float": "left",
+                        "width": "20%",
+                        "padding": "10px",
+                        "display": "block",
+                        "background-color": "#DDD",
+                    },
                 ),
-            ],
-            id="left-panel",
-            style={
-                "float": "left",
-                "width": "20%",
-                "padding": "10px",
-                "display": "block",
-                "background-color": "#DDD",
-            },
-        ),
-        # Collapsible right panel (Content)
-        html.Div(
-            [
-                dbc.Collapse(
-                    dbc.Card(
-                        dbc.CardBody(
-                            [
-                                html.H5("Content"),
-                                dcc.Checklist(
-                                    id="content-list",
-                                    options=[
-                                        {
-                                            "label": f"Content {i}",
-                                            "value": f"content-{i}",
-                                        }
-                                        for i in range(1, 6)
-                                    ],
-                                    value=["content-1"],
-                                ),
-                                html.Div(id="content-display"),
-                            ]
-                        )
-                    ),
-                    id="collapse-right",
-                    is_open=True,
-                ),
-            ],
-            id="right-panel",
-            style={
-                "float": "right",
-                "width": "20%",
-                "padding": "10px",
-                "display": "block",
-                "background-color": "#DDD",
-            },
-        ),
-        # Main body for charts and map
-        html.Div(
-            [
-                dbc.Row(
+                # Collapsible right panel (Content)
+                html.Div(
                     [
-                        dbc.Col(pie_chart, width=6),
-                        dbc.Col(bar_chart, width=6),
-                    ]
+                        dbc.Collapse(
+                            dbc.Card(
+                                dbc.CardBody(
+                                    [
+                                        html.H5("Content"),
+                                        dcc.Checklist(
+                                            id="content-list",
+                                            options=[
+                                                {
+                                                    "label": f"Content {i}",
+                                                    "value": f"content-{i}",
+                                                }
+                                                for i in range(1, 6)
+                                            ],
+                                            value=["content-1"],
+                                        ),
+                                        html.Div(id="content-display"),
+                                    ]
+                                )
+                            ),
+                            id="collapse-right",
+                            is_open=True,
+                        ),
+                    ],
+                    id="right-panel",
+                    style={
+                        "float": "right",
+                        "width": "20%",
+                        "padding": "10px",
+                        "display": "block",
+                        "background-color": "#DDD",
+                    },
                 ),
-                dbc.Row([dbc.Col(map_timeline, width=12)]),
-            ],
-            id="main-content",
-            style={"margin-left": "20%", "margin-right": "20%", "padding": "10px"},
-        ),  # Adjust based on side panels
-    ]
+                # Main body for charts and map
+                html.Div(
+                    [
+                        dbc.Row(
+                            [
+                                dbc.Col(html.Div(
+                                    children=[
+                                        pie_chart,
+                                        # Dropdown to select the pie column
+                                        dcc.Dropdown(
+                                            id='pie-dropdown-column',
+                                            options=lst_columns,
+                                            value=default_top_left_column, 
+                                        )
+                                    ],
+                                ), width=6),
+                                dbc.Col(html.Div(
+                                    children=[
+                                        # Dropdown to select the x-column of bar chart
+                                        dcc.Dropdown(
+                                            id='bar-dropdown-column',
+                                            options=lst_columns,
+                                            value=default_top_right_column
+                                        ),
+                                        bar_chart,
+                                    ],
+                                ), width=6),
+                            ]
+                        ),
+                        dbc.Row([dbc.Col(map_timeline, width=12)]),
+                    ],
+                    id="main-content",
+                    style={"margin-left": "20%", "margin-right": "20%", "padding": "10px"},
+                ),  # Adjust based on side panels
+            ]
+            ),
+            target_components={"data-loading-number": "data" }
+        )
+    ],
 )
 
+
+# Callback to update the bar chart based on dropdown selection
+@app.callback(
+    Output('bar-chart', 'figure'),
+    [Input('bar-dropdown-column', 'value')]
+)
+def update_bar_chart(selected_column):
+    # Create the bar chart
+
+    grouped_df = df.groupby([selected_column, COL_SENTIMENT]).size().reset_index(name='Count')
+
+    print(grouped_df.head())
+    fig = px.bar(grouped_df, x=selected_column, y="Count", color=COL_SENTIMENT)
+    return fig
+
+
+# Callback to update the bar chart based on dropdown selection
+@app.callback(
+    Output('pie-chart', 'figure'),
+    [
+        Input('pie-dropdown-column', 'value'),
+        Input('data-loading-number', 'data')
+    ]
+)
+def update_pie_chart(selected_column, _):
+    # Create the bar chart
+    fig = px.pie(df, names=selected_column, values="pop")
+    return fig
+
+
+@app.callback(
+    Output('data-loading-number', 'data'),
+    [
+        Input('dropdown-contributor', 'value'),
+        Input('dropdown-method', 'value'),
+        Input('dropdown-topic', 'value'),
+    ]
+)
+def update_data(contributor_id, method_id, topic_id):
+
+    if contributor_id == ANY_VALUE:
+        contributor_id = None
+    if method_id == ANY_VALUE:
+        method_id = None
+    if topic_id == ANY_VALUE:
+        topic_id = None
+    # Create the bar chart
+    global query_count
+    global df
+
+    df = database.lookup_sentiment_summaries(
+        topic_id=topic_id,
+        method_id=method_id,
+        contributor_id=contributor_id,
+    )
+    import time
+    time.sleep(3)
+    query_count += 1
+    return query_count
 
 # Callbacks for collapsible panels
 @app.callback(
@@ -264,4 +372,4 @@ def display_content(selected_contents):
 
 # Run the app
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True)

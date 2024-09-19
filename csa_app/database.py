@@ -1,6 +1,8 @@
 import sqlite3
 import typing
 import json
+import pandas as pd
+import datetime
 
 from .model import SentimentSummary, Content
 
@@ -113,13 +115,13 @@ class DatabaseSqlLite:
                     s.location,
                     s.content_datetime,
                     json.dumps(s.contributors),
-                    json.dumps(s.contributors_values),
+                    " ".join(st + "!" for st in s.contributors_values) if s.contributors_values is not None else None,
                     s.method,
                     s.method_lemma,
-                    json.dumps(s.method_values),
+                    " ".join(st + "!" for st in s.method_values) if s.method_values is not None else None,
                     s.topic,
                     s.topic_lemma,
-                    json.dumps(s.topic_values),
+                    " ".join(st + "!" for st in s.topic_values) if s.topic_values is not None else None,
                 )
                 for s in lst_summaries
             ]
@@ -132,31 +134,59 @@ class DatabaseSqlLite:
             c.commit()
 
     def lookup_sentiment_summaries(
-        self, evaluation_id
-    ) -> typing.List[SentimentSummary]:
+        self,
+        topic_id:typing.Optional[str] = None,
+        method_id:typing.Optional[str] = None,
+        contributor_id:typing.Optional[str] = None,
+        sentiment:typing.Optional[bool] = None,
+        start_content_datetime:typing.Optional[datetime.datetime] = None,
+        end_content_datetime:typing.Optional[datetime.datetime] = None,
+        return_limit:typing.Optional[int] = None,
+    ) -> pd.DataFrame:
         with sqlite3.connect(self.db_file_path) as c:
-            results = c.execute(
-                "SELECT * FROM sentiment_summaries WHERE evaluation_id = ?",
-                (evaluation_id,),
-            ).fetchall()
+            base_query = """SELECT 
+                c.content_hash AS content_hash, 
+                s.sentiment AS sentiment,
+                s.method_lemma_id AS method,
+                s.topic_lemma_id AS topic,
+                c.written_date_time AS content_datetime,
+                s.contributors as contributors
+              FROM sentiment_summaries s INNER JOIN content c ON c.content_hash = s.content_hash
+            """
+            where_clauses = []
+            params = []
 
-            l = []
-            """
-            TODO implement
-            if results is not None:
-                for o in results:
-                    l.append(
-                        SentimentSummary(
-                            o[0],
-                            json.loads(o[1]),
-                            json.loads(o[2]),
-                            o[3],
-                            o[4],
-                            o[5],
-                            o[6],
-                            o[7],
-                            o[8] == 1,
-                        )
-                    )
-            """
-            return l
+            if topic_id is not None:
+                where_clauses.append(
+                    f"s.topic_values LIKE ?"
+                )
+                params.append(f"{topic_id}!")
+
+            if method_id is not None:
+                where_clauses.append(
+                    f"s.method_values LIKE ?"
+                )
+                params.append(f"{method_id}!")
+
+            if contributor_id is not None:
+                where_clauses.append(
+                    f"s.contributors_values LIKE ?"
+                )
+                params.append(f"{contributor_id}!")
+            
+            if sentiment is not None:
+                where_clauses.append(
+                    f"s.sentiment = ?"
+                )
+                params.append(f"{1 if sentiment else 0}!")
+            
+            where_clause = ""
+            if len(where_clauses)>0:
+                where_clause = " WHERE " + " AND ".join(where_clauses)
+
+            limit_clause = ""
+            if return_limit is not None:
+                limit_clause = " LIMIT 0,?"
+                params.append(return_limit)
+            df = pd.read_sql_query(base_query + where_clause + limit_clause, c, params=params)
+            return df

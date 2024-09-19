@@ -32,7 +32,7 @@ class SynsetDatabaseWordNet:
         return synset_options
 
     def get_parent_ids(self, synset_id) -> typing.List[str]:
-        p_ids = []
+        p_ids = set()
 
         to_get = [synset_id]
         while len(to_get) > 0:
@@ -42,7 +42,7 @@ class SynsetDatabaseWordNet:
             parents = s.hypernyms()
             for p in parents:
                 p_id = p._name
-                p_ids.append(p_id)
+                p_ids.add(p_id)
                 to_get.append(p_id)
 
-        return p_ids
+        return list(p_ids)

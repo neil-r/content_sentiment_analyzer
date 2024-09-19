@@ -4,6 +4,7 @@ import json
 from pydantic import BaseModel
 import time
 
+from .ambiguty_processor import MultipleChoiceResponse
 from .model import Content, SentimentSummary
 
 client = openai.OpenAI()
@@ -13,9 +14,9 @@ class SentimentResponse(BaseModel):
     justifications_of_sentiment:typing.List[str]
     sentiment: typing.Literal["negative", "positive", "neutral"]
     names_of_contributors_that_cause_sentiment: typing.List[str]
-    how_contributors_cause_sentiment:str
-    how_contributors_cause_sentiment_lemma:str
-    how_tense: typing.Literal["past", "present", "future"]
+    actions_causing_sentiment:str
+    action_lemma:str
+    action_tense: typing.Literal["past", "present", "future"]
     topic:str
     topic_lemma:str
     #stated_as_fact: bool
@@ -61,6 +62,7 @@ def process(
         print("Valid JSON received:")
         print(json.dumps(sr.dict(), indent=4))  # Print formatted JSON
         messages.append(completion.choices[0].message.dict())
+
         return SentimentSummary(
             content_hash=content.content_hash,
             model_id=model,
@@ -71,8 +73,8 @@ def process(
             topic_lemma=sr.topic_lemma,
             location=sr.lat_lng_of_topic_location,
             content_datetime=sr.datetime_of_topic,
-            method=sr.how_contributors_cause_sentiment,
-            method_lemma=sr.how_contributors_cause_sentiment_lemma,
+            method=sr.actions_causing_sentiment,
+            method_lemma=sr.action_lemma,
             contributors=sr.names_of_contributors_that_cause_sentiment,
             discussion_duration=duration,
             log=messages,
@@ -80,7 +82,31 @@ def process(
             contributors_values=None,
             method_values=None,
         )
-    except json.JSONDecodeError:
-        print("The response was not valid JSON. Here is the raw output:")
-        print(response_text)
+    except json.JSONDecodeError as e:
+        print(f"The response was not valid JSON. Here is the raw error: {e}")
         return None
+
+
+def process_multiple_choice_prompt(prompt, model, max_tokens=4096,temperature=0) -> typing.Tuple[MultipleChoiceResponse,float,dict]:
+
+    system_prompt = "Given the multiple-choice question provided, responsd with the letter of the most accurate response."
+    start = time.time()
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt},
+    ]
+    completion = client.beta.chat.completions.parse(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=messages,
+        response_format=MultipleChoiceResponse,
+    )
+    duration = time.time() - start
+
+    return (
+        completion.choices[0].message.parsed,
+        duration,
+        completion.choices[0].message.dict(),
+    )
+

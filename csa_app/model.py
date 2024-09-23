@@ -21,6 +21,7 @@ class Content:
     forum: str
     raw_details: dict
     written_date_time: str
+    region: str
 
 
 @dataclasses.dataclass
